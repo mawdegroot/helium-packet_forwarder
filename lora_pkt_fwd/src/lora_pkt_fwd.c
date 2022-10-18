@@ -103,7 +103,7 @@ Maintainer: Michael Coracin
 
 #define STATUS_SIZE     200
 #define TX_BUFF_SIZE    ((540 * NB_PKT_MAX) + 30 + STATUS_SIZE)
-#define ACK_BUFF_SIZE   64
+#define ACK_BUFF_SIZE   80
 
 #define UNIX_GPS_EPOCH_OFFSET 315964800 /* Number of seconds ellapsed between 01.Jan.1970 00:00:00
                                                                           and 06.Jan.1980 00:00:00 */
