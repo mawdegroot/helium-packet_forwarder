@@ -907,7 +907,7 @@ static int send_tx_ack(uint8_t token_h, uint8_t token_l, enum jit_error_e error,
 
     /* set downlink error/warning status in JSON structure */
     switch( error ) {
-        case JIT_ERROR_TX_POWER:
+        case JIT_WARN_TX_POWER:
             memcpy((void *)(buff_ack + buff_index), (void *)"\"warn\":", 7);
             buff_index += 7;
             break;
@@ -959,6 +959,10 @@ static int send_tx_ack(uint8_t token_h, uint8_t token_l, enum jit_error_e error,
         case JIT_ERROR_TX_POWER:
             memcpy((void *)(buff_ack + buff_index), (void *)"\"TX_POWER\"", 10);
             buff_index += 10;
+            break;
+        case JIT_WARN_TX_POWER:
+            memcpy((void *)(buff_ack + buff_index), (void *)"\"TX_POWER\"", 10);
+            buff_index += 10;
             j = snprintf((char *)(buff_ack + buff_index), ACK_BUFF_SIZE-buff_index, ",\"value\":%d", error_value);
             if (j > 0) {
                 buff_index += j;
@@ -982,7 +986,7 @@ static int send_tx_ack(uint8_t token_h, uint8_t token_l, enum jit_error_e error,
     }
 
     /* If anything was transmitted, report transmit timestamp */
-    if (error == JIT_ERROR_OK || error == JIT_ERROR_TX_POWER) {
+    if (error == JIT_ERROR_OK || error == JIT_WARN_TX_POWER) {
         j = snprintf((char *)(buff_ack + buff_index), ACK_BUFF_SIZE-buff_index, ",\"tmst\":%u", timestamp_sent);
         if (j > 0) {
             buff_index += j; /* at most, 17 characters */
@@ -2596,9 +2600,12 @@ void thread_down(void) {
             if (jit_result == JIT_ERROR_OK) {
                 uint8_t tx_lut_idx = 0;
                 i = get_tx_gain_lut_index(txpkt.rf_power, &tx_lut_idx);
-                if ((i < 0) || (txlut.lut[tx_lut_idx].rf_power != txpkt.rf_power)) {
+                if (i < 0) {
+                    jit_result = JIT_ERROR_TX_POWER;
+                    printf("WARNING: No TX power lower or equal to %ddBm is supported, rejecting transmission\n", txpkt.rf_power);
+                } else if (txlut.lut[tx_lut_idx].rf_power != txpkt.rf_power) {
                     /* this RF power is not supported, throw a warning, and use the closest lower power supported */
-                    warning_result = JIT_ERROR_TX_POWER;
+                    warning_result = JIT_WARN_TX_POWER;
                     warning_value = txlut.lut[tx_lut_idx].rf_power;
                     MSG("WARNING: Requested TX power is not supported (%ddBm), actual power used: %ddBm\n", txpkt.rf_power, warning_value);
                     txpkt.rf_power = txlut.lut[tx_lut_idx].rf_power;
@@ -2606,7 +2613,7 @@ void thread_down(void) {
             }
 
             /* insert packet to be sent into JIT queue */
-            if (jit_result == JIT_ERROR_OK) {
+            if (jit_result == JIT_ERROR_OK || jit_result == JIT_WARN_TX_POWER) {
                 gettimeofday(&current_unix_time, NULL);
                 get_concentrator_time(&current_concentrator_time, current_unix_time);
                 jit_result = jit_enqueue(&jit_queue, &current_concentrator_time, &txpkt, downlink_type);
